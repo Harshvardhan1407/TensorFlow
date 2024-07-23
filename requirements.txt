@@ -1,0 +1,6 @@
+python-dotenv
+ipykernel 
+tensorflow
+matplotlib
+tensorflow-hub
+tensorflow-datasets
