@@ -2,7 +2,7 @@
 
 # setup
 1. create an virtual environment 
-    : python -m venv mlenv
+    : python -m venv tfenv
 2. upgrade latest pip version 
     : python.exe -m pip install --upgrade pip
 3. all necessary libaries required is in requirements.txt  
