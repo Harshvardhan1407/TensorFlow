@@ -4,3 +4,5 @@ tensorflow
 matplotlib
 tensorflow-hub
 tensorflow-datasets
+seaborn
+scikit-learn
