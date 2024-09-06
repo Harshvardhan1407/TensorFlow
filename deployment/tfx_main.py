@@ -1,7 +1,7 @@
 import tensorflow as tf
 print('TensorFlow version: {}'.format(tf.__version__))
 from tensorflow import keras
-from tensorflow.keras import layers
+# from tensorflow.keras import layers
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -38,6 +38,6 @@ train_labels = train_features.pop('consumed_unit')
 test_labels = test_features.pop('consumed_unit')
 
 linear_model = tf.keras.Sequential([
-    layers.Dense(units=1)
+    # layers.Dense(units=1)
 ])
 test_results = {}
