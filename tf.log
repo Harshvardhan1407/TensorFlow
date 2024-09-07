@@ -1,0 +1,3 @@
+2024-09-07 15:55:54,455 tf version:2.9.0
+2024-09-07 15:55:54,578 df read with columns: ('temperature_2m', 'relative_humidity_2m', 'apparent_temperature', 'wind_speed_10m', 'wind_speed_100m', 'consumed_unit', 'lag1', 'lag2', 'lag3', 'lag4', 'lag5', 'day', 'hour', 'month', 'dayofweek', 'dayofyear', 'label_sensor_id', 'min')
+2024-09-07 15:55:54,603 data split done
