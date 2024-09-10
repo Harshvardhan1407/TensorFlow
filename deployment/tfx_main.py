@@ -1,6 +1,7 @@
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers # type: ignore
+print("tf version:",tf.__version__)
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -9,7 +10,10 @@ from sklearn.metrics import r2_score
 import numpy as np
 from sklearn.inspection import permutation_importance
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-# Make NumPy printouts easier to read.
+import tensorflow as tf
+from tensorflow.keras.models import Sequential # type: ignore
+from tensorflow.keras.layers import LSTM, Dense, Dropout  # type: ignore
+from tensorflow.keras import regularizers  # type: ignore
 np.set_printoptions(precision=3, suppress=True)
 import sys
 import os
@@ -20,19 +24,19 @@ logger.info(f"tf version:{tf.__version__}")
 # data ingestion 
 def data_ingstion():
     try:
-        dfs = pd.read_parquet(r"D:\RND\Machine_Learning\Datasets/clean_dataset_ml_50_id.parquet")
+        dfs = pd.read_parquet(r"D:\RND\Machine_Learning\Datasets/clean_dataset_ml_100_id.parquet")
         dfs.fillna(0,inplace=True)
         df = dfs.copy()
         df['creation_time'] = pd.to_datetime(df['creation_time'])
         df.set_index(['creation_time'],drop= True, inplace= True)
-        df["min"] = df.index.minute
+        # df["min"] = df.index.minute
         df.sort_index(inplace=True)
         df.reset_index(drop=True,inplace=True)
-        logger.info(f"df read with columns: {tuple(df.columns)}")
+        logger.info(f"columns in df : {tuple(df.columns)}")
+        logger.info(f"shape of dataframe : {tuple(df.shape)}")
         return df
     except Exception as e:
         logger.error(f"error in data ingestion:{e}",exc_info=True)
-df = data_ingstion()
 def correlation_matrix(df):
     try:
         correlation_matrix = df.corr()
@@ -46,6 +50,34 @@ def correlation_matrix(df):
     except Exception as e:
         logger.error(f"error in correlation_plot: {e}")
 
+# train test split
+def train_test_split(df):
+    try:
+        # column_indices = {name: i for i, name in enumerate(df.columns)}
+        n = len(df)
+        train_df = df[0:int(n*0.9)]
+        # val_df = df[int(n*0.7):int(n*0.9)]
+        test_df = df[int(n*0.9):]
+        # print(f"train_df:,{len(train_df)},val_df:,{len(val_df)},test_df:{len(test_df)}")
+        print(f"train_df:,{len(train_df)},test_df:{len(test_df)}")
+        train_features, test_features = train_df.copy(),test_df.copy() #,val_df.copy()
+        train_labels = train_features.pop('consumed_unit')
+        # val_labels = val_features.pop('consumed_unit')
+        test_labels = test_features.pop('consumed_unit')
+        logger.info(f"data split done")
+        logger.info(f"traning data shape:{train_features.shape},test data shape: {test_features.shape}")
+        return train_features,test_features,train_labels, test_labels
+    except Exception as e:
+        logger.error(f"error in split: {e}")
+
+# tensor conversion
+def tensor_conversion(df):
+    try:
+        tf_dataset = tf.data.Dataset.from_tensor_slices(df)
+        return tf_dataset
+    except Exception as e:
+        logger.error(f"error in tensor_conversion :{e}")
+
 # feature engineering
 # normalization
 def normalizer_function(df):
@@ -58,27 +90,7 @@ def normalizer_function(df):
     
     except Exception as e:
         logger.error(f"error in normalizer: {e}")
-# train test split
-def train_test_split(df):
-    try:
-        # column_indices = {name: i for i, name in enumerate(df.columns)}
-        n = len(df)
-        train_df = df[0:int(n*0.7)]
-        val_df = df[int(n*0.7):int(n*0.9)]
-        test_df = df[int(n*0.9):]
-        print(f"train_df:,{len(train_df)},val_df:,{len(val_df)},test_df:{len(test_df)}")
-        train_features,val_features,test_features = train_df.copy(),val_df.copy(),test_df.copy()
-        train_labels = train_features.pop('consumed_unit')
-        val_labels = val_features.pop('consumed_unit')
-        test_labels = test_features.pop('consumed_unit')
-        logger.info(f"data split done")
-        return train_features,val_features,test_features,train_labels,val_labels, test_labels
 
-    except Exception as e:
-        logger.error(f"error in split: {e}")
-
-train_features,val_features,test_features,train_labels,val_labels,test_labels = train_test_split(df)
-print(train_features.shape,val_features.shape,test_features.shape)
 def compile_and_fit(model,
                     train_features = train_features,
                     train_labels = train_labels, 
@@ -104,17 +116,6 @@ def compile_and_fit(model,
         return model, history
     except Exception as e:
         logger.info(f"error in compiling and fitting: {e}")
-normalizer = normalizer_function(train_features)
-model = keras.Sequential([
-      normalizer,
-      layers.Dense(64, activation='relu',input_shape=(17,)),
-      layers.Dense(64, activation='relu'),
-      layers.Dense(32, activation='relu'),
-      layers.Dense(16, activation='relu'),
-      layers.Dense(1)])
-
-model, history= compile_and_fit(model,batch_size=16)
-
 def training_score(history):
     print(f"training_score:loss:{history.history['loss'][-1]:.3f},mae:{history.history['mean_absolute_error'][-1]:.3f}")
 
@@ -133,6 +134,22 @@ def prediction(model, input_data,input_label=None,verbose=1):
     print(f"mse: {mse:.3f}")
     print(f"R2: {r2:.3f}")
     return y_pred
+
+
+df = data_ingstion()
+train_features,val_features,test_features,train_labels,val_labels,test_labels = train_test_split(df)
+print(train_features.shape,val_features.shape,test_features.shape)
+normalizer = normalizer_function(train_features)
+model = keras.Sequential([
+      normalizer,
+      layers.Dense(64, activation='relu',input_shape=(17,)),
+      layers.Dense(64, activation='relu'),
+      layers.Dense(32, activation='relu'),
+      layers.Dense(16, activation='relu'),
+      layers.Dense(1)])
+
+model, history= compile_and_fit(model,batch_size=16)
+
 
 training_score(history)
 score = evaluate(model, val_features,val_labels)
