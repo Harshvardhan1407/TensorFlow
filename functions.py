@@ -175,16 +175,6 @@ def train_test_split(df):
     except Exception as e:
         logger.error(f"error in split: {e}",exc_info=True)
 
-# # tensor conversion
-# def tensor_conversion(df):
-#     try:
-#         tf_dataset = tf.data.Dataset.from_tensor_slices(df)
-#         return tf_dataset
-#     except Exception as e:
-#         logger.error(f"error in tensor_conversion :{e}",exc_info=True)
-
-# feature engineering
-# normalization
 def normalizer_function(df):
     try:
         # df_mean, df_std = df.mean(), df.std()
