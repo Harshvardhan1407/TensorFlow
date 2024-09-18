@@ -251,7 +251,6 @@ def predict_func(model, input_data, input_label=None, verbose=1):
     total_error = tf.reduce_sum(tf.square(input_label - tf.reduce_mean(input_label)))
     unexplained_error = tf.reduce_sum(tf.square(input_label - y_pred))
     r2 = 1 - tf.divide(unexplained_error, total_error).numpy()
-
     return mae, mse, r2
 
 # Example usage
