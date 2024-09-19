@@ -7,8 +7,108 @@ import tensorflow as tf
 import seaborn as sns
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from logger import logger
+from tabulate import tabulate
 
 from sklearn.cluster import DBSCAN
+
+class NPCL():
+    def __init__(self) -> None:
+        pass
+    def data_ingestion_npcl(self,data_path=None):
+        df = pd.read_csv(data_path, parse_dates=['creation_time'])
+        data = df.copy()
+        print(f"stats at starting: \n total data points: {len(data)}, \n no of location_id: {data['location_id'].nunique()}.")
+        # data.drop(["status","id","error_reason"],axis=1,inplace= True)
+        data.drop(['id'],axis= 1,inplace= True)    
+        # data = data.loc[data['location_id']!= 100000011999]
+        data = data.loc[~data['location_id'].isin([100000011999, 100000190001, 100000030201, 100000011203])]
+        null_values = data.isna().sum().sum()
+        print(f"null values: {null_values}")
+        if null_values != 0:
+            data.dropna(inplace= True)
+            print(f"dropped null values")
+            print(f"null values: {data.isna().sum().sum()}") 
+        duplicate_values = data.duplicated().sum()
+        print(f"duplicate values: {duplicate_values}")
+        if duplicate_values != 0:
+            data.drop_duplicates(inplace = True)
+            print(f"duplicate values dropped")
+            print(f"duplicate values: {data.duplicated().sum()}")
+        
+        # Dictionary to rename columns
+        rename_dict = {
+            'R_voltage': 'R_Voltage',
+            'Y_volatge': 'Y_Voltage',
+            'B_voltage': 'B_Voltage',
+            'r_current': 'R_Current',
+            'y_current': 'Y_Current',
+            'b_current': 'B_Current',
+            'r_pf': 'R_PF',
+            'y_pf': 'Y_PF',
+            'b_pf': 'B_PF',
+            'instant_cum_Kw': 'Load_kW',
+            'instant_cum_Kva': 'Load_KVA',
+            'grid_reading_kwh': 'grid_reading_kwh',  
+            'creation_time': 'creation_time'
+        }
+        # Rename columns
+        data.rename(columns=rename_dict, inplace=True)
+        data = data[['location_id', 'creation_time', 'frequency', 'R_Voltage', 'Y_Voltage', 'B_Voltage',
+                'R_Current', 'Y_Current', 'B_Current', 'R_PF', 'Y_PF', 'B_PF', 'Load_kW', 'Load_KVA',
+                'grid_reading_kwh','grid_reading_kvah'
+                ,"error_reason"
+                ]]
+        data.sort_values("creation_time", inplace= True)
+        data.reset_index(drop=True,inplace=True)
+        print(f"stats after: \n total data points: {len(data)}, \n no of location_id: {data['location_id'].nunique()}.")
+        # data.sort_index(inplace=True)
+        print("#############--data ingestion done--".ljust(180,"#"))
+        print()
+        return data
+
+    def data_filter_condition(self,data= None):
+        # Combining all conditions into one
+        print(f"length in starting: {len(data)}")
+        combined_condition = (
+            # Frequency should be between 49 and 51
+            (data['frequency'] !=0) & ((data['frequency'] > 51) | (data['frequency'] < 49))  |
+            # Any PF outside the range [-1, 1]
+            (data[['R_PF', 'Y_PF', 'B_PF']].abs() > 1).any(axis=1) |
+            # All voltages are zero and either Load kW is non-zero or all currents are non-zero
+            ((data[['R_Voltage', 'Y_Voltage', 'B_Voltage']].eq(0).all(axis=1)) &
+            ((data['Load_kW'] != 0) | 
+            (data[['R_Current', 'Y_Current', 'B_Current']].ne(0).all(axis=1)))) |
+            # All currents are zero and either Load kW or Load KVA is greater than 0.03
+            ((data[['R_Current', 'Y_Current', 'B_Current']].eq(0).all(axis=1)) &
+            ((data['Load_kW'] > 0.03) | (data['Load_KVA'] > 0.03))) |
+            # Load kW cannot be greater than Load KVA
+            (data['Load_kW'] > data['Load_KVA'])
+        )
+        # Applying the combined condition
+        data = data.loc[~combined_condition]
+        print(f"length in ending: {len(data)}")
+        data.reset_index(drop=True,inplace=True)
+        summary = data.iloc[:, 2:14].describe()
+        print(f"after cleaning dataframe stats")
+        print(f"{tabulate(summary.round(2), headers='keys', tablefmt='pretty')}")
+        print("#############--data filtering done--".ljust(180,"#"))
+        print()
+        return data
+
+    def data_cleaning_and_validation(self,df=None):
+        print(f"date_time data type: {df['creation_time'].dtype}")
+        if df['creation_time'].dtype not in ['<M8[ns]',"datetime64[ns]"]:
+            df['creation_time'] = pd.to_datetime(df['creation_time'])
+        for col in df.columns:
+            if df[col].dtype == object:
+                print(f"columns with categorical values: {col}")
+        summary = df.iloc[:, 2:14].describe()
+        print(f"before cleaning dataframe stats")
+        print(f"{tabulate(summary.round(2), headers='keys', tablefmt='pretty')}")
+        df = self.data_filter_condition(df)
+        print("#############--data cleaning and validation done--".ljust(180,"#"))
+        print()
+        return df
 
 def add_lags(dff):
     try:
