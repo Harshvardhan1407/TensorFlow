@@ -3,3 +3,5 @@
 __pycache__
 testing.ipynb
 test2.ipynb
+.vscode
+/training
