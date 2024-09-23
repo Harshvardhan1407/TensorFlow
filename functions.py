@@ -96,19 +96,24 @@ class NPCL():
         return data
 
     def data_cleaning_and_validation(self,df=None):
-        print(f"date_time data type: {df['creation_time'].dtype}")
-        if df['creation_time'].dtype not in ['<M8[ns]',"datetime64[ns]"]:
-            df['creation_time'] = pd.to_datetime(df['creation_time'])
-        for col in df.columns:
-            if df[col].dtype == object:
-                print(f"columns with categorical values: {col}")
-        summary = df.iloc[:, 2:14].describe()
-        print(f"before cleaning dataframe stats")
-        print(f"{tabulate(summary.round(2), headers='keys', tablefmt='pretty')}")
-        df = self.data_filter_condition(df)
-        print("#############--data cleaning and validation done--".ljust(180,"#"))
-        print()
-        return df
+        try:
+            print(f"date_time data type: {df['creation_time'].dtype}")
+            if df['creation_time'].dtype not in ['<M8[ns]',"datetime64[ns]"]:
+                df['creation_time'] = pd.to_datetime(df['creation_time'])
+            for col in df.columns:
+                if df[col].dtype == object:
+                    print(f"columns with categorical values: {col}")
+            summary = df.iloc[:, 2:14].describe()
+            print(f"before cleaning dataframe stats")
+            print(f"{tabulate(summary.round(2), headers='keys', tablefmt='pretty')}")
+            df = self.data_filter_condition(df)
+            print("#############--data cleaning and validation done--".ljust(180,"#"))
+            print()
+            return df
+        except Exception as e:
+            print(f"error in data cleaing and filtering: {e}")
+
+######################################################################################################################################
 
 def add_lags(dff):
     try:
