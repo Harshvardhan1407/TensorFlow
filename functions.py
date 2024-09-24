@@ -236,11 +236,11 @@ def data_ingstion():
 
 def correlation_matrix(df):
     try:
-        correlation_matrix = df.corr()
+        correlation_matrix_data = df.corr()
         # Set up the matplotlib figure
         plt.figure(figsize=(10, 8))
         # Draw the heatmap
-        sns.heatmap(correlation_matrix, annot=True, fmt=".2f", cmap='coolwarm', square=True, linewidths=0.5)
+        sns.heatmap(correlation_matrix_data, annot=True, fmt=".2f", cmap='coolwarm', square=True, linewidths=0.5)
         # Show the plot
         plt.show()
     
