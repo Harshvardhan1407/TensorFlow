@@ -100,6 +100,7 @@ class NPCL():
             print(f"date_time data type: {df['creation_time'].dtype}")
             if df['creation_time'].dtype not in ['<M8[ns]',"datetime64[ns]"]:
                 df['creation_time'] = pd.to_datetime(df['creation_time'])
+            df[['R_PF', 'Y_PF', 'B_PF']] = df[['R_PF', 'Y_PF', 'B_PF']].abs()
             for col in df.columns:
                 if df[col].dtype == object:
                     print(f"columns with categorical values: {col}")
