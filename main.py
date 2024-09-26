@@ -26,7 +26,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from logger import logger
 logger.info(f"tf version:{tf.__version__}")
-from functions import data_ingstion, train_test_split, normalizer_function, compile_and_fit, training_score, evaluate, predict_func, tensor_convertor
+from common_functions import data_ingstion, train_test_split, normalizer_function, compile_and_fit, training_score, evaluate, predict_func, tensor_convertor
 
 BATCH_SIZE = 32
 EPOCHS=50
