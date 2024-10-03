@@ -201,7 +201,18 @@ class common():
             return model
         except Exception as e:
             logger.error(f"error in model trainer: {e}",exc_info=True)
-
+    def correlation_matrix(self,df):
+        try:
+            correlation_matrix_data = df.corr()
+            # Set up the matplotlib figure
+            plt.figure(figsize=(18, 10))
+            # Draw the heatmap
+            sns.heatmap(correlation_matrix_data, annot=True, fmt=".2f", cmap='coolwarm', square=True, linewidths=0.5)
+            # Show the plot
+            plt.show()
+        
+        except Exception as e:
+            logger.error(f"error in correlation_plot: {e}",exc_info=True)
 
 class NPCL():
     def __init__(self) -> None:
@@ -265,17 +276,23 @@ class NPCL():
             combined_condition = (
                 # Frequency should be between 49 and 51
                 (data['frequency'] !=0) & ((data['frequency'] > 51) | (data['frequency'] < 49))  |
+
                 # Any PF outside the range [-1, 1]
                 (data[['R_PF', 'Y_PF', 'B_PF']].abs() > 1).any(axis=1) |
+
                 # All voltages are zero and either Load kW is non-zero or all currents are non-zero
-                ((data[['R_Voltage', 'Y_Voltage', 'B_Voltage']].eq(0).all(axis=1)) &
-                ((data['Load_kW'] != 0) | 
+                ((data[['R_Voltage', 'Y_Voltage', 'B_Voltage']].eq(0).all(axis=1)) & ((data['Load_kW'] != 0) | 
                 (data[['R_Current', 'Y_Current', 'B_Current']].ne(0).all(axis=1)))) |
+
                 # All currents are zero and either Load kW or Load KVA is greater than 0.03
-                ((data[['R_Current', 'Y_Current', 'B_Current']].eq(0).all(axis=1)) &
-                ((data['Load_kW'] > 0.03) | (data['Load_KVA'] > 0.03))) |
+                ((data[['R_Current', 'Y_Current', 'B_Current']].eq(0).all(axis=1)) & ((data['Load_kW'] > 0.03) | (data['Load_KVA'] > 0.03))) |
+
                 # Load kW cannot be greater than Load KVA
-                (data['Load_kW'] > data['Load_KVA'])
+                (data['Load_kW'] > data['Load_KVA']) |
+                
+                # load zero where current consumption
+                (data['Load_kW'] ==0)&
+                ((data['R_Current']!=0) |  (data['Y_Current']!=0) | (data['B_Current']!=0))
             )
             # Applying the combined condition
             data = data.loc[~combined_condition]
@@ -313,7 +330,7 @@ class NPCL():
         except Exception as e:
             logger.info(f"error in data cleaing and filtering: {e}",exc_info= True)
 
-    def weather_data_api(self,latitude, longitude,from_date,to_date):
+    def weather_data_api(self, latitude, longitude, from_date, to_date, duration="hour"):
         try:
             url = f"https://archive-api.open-meteo.com/v1/archive?latitude={latitude}&longitude={longitude}&start_date={from_date}&end_date={to_date}&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,wind_speed_10m,wind_speed_100m"
             logger.info(f"weather api url : {url}")
@@ -339,6 +356,11 @@ class NPCL():
             weather_df = pd.DataFrame(weather_data['hourly'])
             weather_df['time'] = pd.to_datetime(weather_df['time'])
             weather_df.rename(columns={"time":"creation_time"}, inplace=True)
+            logger.info(f"weather data:{len(weather_df)} ")
+
+            if duration != "hour":
+                resampled_df = weather_df.resample(rule=duration).bfill()
+                return resampled_df
             logger.info(f"weather data done")
             return weather_df
                 
@@ -432,18 +454,6 @@ def data_ingstion():
     except Exception as e:
         logger.error(f"error in data ingestion:{e}",exc_info=True)
 
-def correlation_matrix(df):
-    try:
-        correlation_matrix_data = df.corr()
-        # Set up the matplotlib figure
-        plt.figure(figsize=(18, 10))
-        # Draw the heatmap
-        sns.heatmap(correlation_matrix_data, annot=True, fmt=".2f", cmap='coolwarm', square=True, linewidths=0.5)
-        # Show the plot
-        plt.show()
-    
-    except Exception as e:
-        logger.error(f"error in correlation_plot: {e}",exc_info=True)
 
 def tensor_conversion(dataframe):
     try:
