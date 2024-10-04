@@ -19,6 +19,10 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+# from sklearn.externals import joblib
+import joblib
+
 
 class common():
     def __init__(self) -> None:
@@ -45,32 +49,30 @@ class common():
             logger.error(f"Error in holidays_list: {e}")
             return None
 
-    def add_lags(self,dff,target_col):
+    def add_lags(self, dff, target_col, large_data= False):
         try:
             # target_map = dff['consumed_unit'].to_dict()
             target_map = dff[target_col].to_dict()
+
             # 1 Hour, 2 Hours, 6 Hours
-            dff['lag1_hour'] = (dff.index - pd.Timedelta('1 hour')).map(target_map)
-            dff['lag2_hours'] = (dff.index - pd.Timedelta('2 hours')).map(target_map)
-            dff['lag6_hours'] = (dff.index - pd.Timedelta('6 hours')).map(target_map)
-            dff['lag12_hours'] = (dff.index - pd.Timedelta('12 hours')).map(target_map)
-            # 1 Day, 2 Days
-            dff['lag1_day'] = (dff.index - pd.Timedelta('1 day')).map(target_map)
+            dff['lag1_hour']   =  (dff.index - pd.Timedelta('1 hour')).map(target_map)
+            dff['lag2_hours']  =  (dff.index - pd.Timedelta('2 hours')).map(target_map)
+            dff['lag3_hours']  =  (dff.index - pd.Timedelta('3 hours')).map(target_map)
+            dff['lag6_hours']  =  (dff.index - pd.Timedelta('6 hours')).map(target_map)
+            dff['lag12_hours'] =  (dff.index - pd.Timedelta('12 hours')).map(target_map)
+            dff['lag1_day']    =  (dff.index - pd.Timedelta('1 day')).map(target_map)
+            dff['lag1_week']   =  (dff.index - pd.Timedelta('7 days')).map(target_map)
+
+            if large_data:
+                dff['lag_15_day'] = (dff.index - pd.Timedelta('15 days')).map(target_map)
+                dff['lag_30_day'] = (dff.index - pd.Timedelta('30 days')).map(target_map)
+                dff['lag_45_day'] = (dff.index - pd.Timedelta('45 days')).map(target_map)
+                logger.info(f" lags added for large data")
+                return dff
+            
             dff['lag2_days'] = (dff.index - pd.Timedelta('2 days')).map(target_map)
             dff['lag3_days'] = (dff.index - pd.Timedelta('3 days')).map(target_map)
-            # 1 Week
-            dff['lag1_week'] = (dff.index - pd.Timedelta('7 days')).map(target_map)
-            # Reset the index to avoid errors when using the timedelta map
-            # dff.reset_index(drop=True, inplace=True)
 
-            # # 15 minutes, 30 minutes, 1 hour
-            # dff['lag1'] = (dff.index - pd.Timedelta('1 Hour')).map(target_map)
-            # dff['lag2'] = (dff.index - pd.Timedelta('30 minutes')).map(target_map)
-            # dff['lag3'] = (dff.index - pd.Timedelta('1 day')).map(target_map)
-            # dff['lag4'] = (dff.index - pd.Timedelta('7 days')).map(target_map)
-            # # df['lag5'] = (df.index - pd.Timedelta('15 days')).map(target_map)
-            # # df['lag6'] = (df.index - pd.Timedelta('30 days')).map(target_map)
-            # # df['lag7'] = (df.index - pd.Timedelta('45 days')).map(target_map)
             logger.info(f"lags added")
             return dff
         
@@ -165,42 +167,150 @@ class common():
             logger.error(f"Error in holidays_list: {e}",exc_info=True)
             return None
         
-    def model_trainer(self,dataset,model=None):
+    def data_split(self, dataset, target_variable= "Load_kW"): 
+        """
+            Splits the given dataset into training and testing sets, separating features and the target variable.
+
+            Args:
+                dataset (pandas.DataFrame): The dataset containing both features and the target variable.
+                target_variable (str): The name of the column representing the target variable to be predicted. Default is 'Load_kW'.
+
+            Returns:
+                X_train (pandas.DataFrame): Training set features.
+                X_test (pandas.DataFrame): Testing set features.
+                y_train (pandas.Series): Training set target variable.
+                y_test (pandas.Series): Testing set target variable.
+            
+            Raises:
+                Exception: If there's an issue during the data split, an error message is logged.
+
+            Example:
+                >>> df = pd.DataFrame({...})
+                >>> X_train, X_test, y_train, y_test = obj.data_split(df, target_variable="Load_kW")
+        """
         try:
             dataset_features = dataset.copy()
-            dataset_label = dataset_features.pop("Load_kW")
+            dataset_label = dataset_features.pop(target_variable)
             # Split the dataset into training and test sets
-            X_train, X_test, y_train, y_test = train_test_split(dataset_features, dataset_label, test_size=0.2, random_state=42)
-            # Step 4: Initialize the RandomForestRegressor model
-            model = RandomForestRegressor(n_estimators=100, random_state=42)  # You can tweak hyperparameters
+            X_train, X_test, y_train, y_test = train_test_split(dataset_features, dataset_label, test_size=0.2, 
+                                                                # random_state=42
+                                                                )
+            return X_train, X_test, y_train, y_test
+        
+        except Exception as e:
+            logger.info(f"error in data split : {e}",exc_info=True)
+
+    def data_split_function(self,dataset, target_variable= "Load_kW"):
+        """
+            Splits the given dataset into training and testing sets, separating features and the target variable.
+
+            Args:
+                dataset (pandas.DataFrame): The dataset containing both features and the target variable.
+                target_variable (str): The name of the column representing the target variable to be predicted. Default is 'Load_kW'.
+
+            Returns:
+                X_train (pandas.DataFrame): Training set features.
+                X_test (pandas.DataFrame): Testing set features.
+                y_train (pandas.Series): Training set target variable.
+                y_test (pandas.Series): Testing set target variable.
+            
+            Raises:
+                Exception: If there's an issue during the data split, an error message is logged.
+
+            Example:
+                >>> df = pd.DataFrame({...})
+                >>> X_train, X_test, y_train, y_test = obj.data_split(df, target_variable="Load_kW")
+        """
+        try:
+            n = len(dataset)
+            train_df = dataset[0:int(n*0.9)]
+            test_df = dataset[int(n*0.9):]
+            train_features, test_features = train_df.copy(),test_df.copy() #,val_df.copy()
+            train_labels = train_features.pop(target_variable)
+            test_labels = test_features.pop(target_variable)
+            
+            # print(f"train_features shape:{train_features.shape},train_label shape: {train_labels.shape}")
+            # print(f"test_features shape:{test_features.shape} ,test_label shape: {test_labels.shape}")
+            logger.info(f"data split done")
+            logger.info(f"train_features shape:{train_features.shape},train_label shape: {train_labels.shape}")
+            logger.info(f"test_features shape:{test_features.shape} ,test_label shape: {test_labels.shape}")
+            return train_features,test_features,train_labels, test_labels
+        
+        except Exception as e:
+            logger.error(f"error in split: {e}",exc_info=True)
+
+
+    def model_trainer(self, train_fetures, train_label,model_name=None):
+        try:
+            dataset = train_fetures.merge(train_label, on="creation_time").copy()
+            # Split the dataset into training and test sets
+            X_train, X_test, y_train, y_test = self.data_split_function(dataset=dataset)
+
+            if model_name =="RFR":
+                # Step 4: Initialize the RandomForestRegressor model
+                model = RandomForestRegressor(n_estimators=100, random_state=42)  # You can tweak hyperparameters
+
             # Step 5: Train the model
             model.fit(X_train, y_train)
-            
-            # Step 6: Make predictions
-            y_power_pred = model.predict(X_test)
             logger.info(f"model trained")
-            # Step 7: Evaluate the model
-            print("\nModel Power Evaluation")
-            print("Mean Squared Error (MSE):", mean_squared_error(y_test, y_power_pred))
-            print("Mean Absolute Error (MAE):", mean_absolute_error(y_test, y_power_pred))
-            print("R-squared:", r2_score(y_test, y_power_pred))
+            
+            self.prediction(model= model,
+                            input_data= X_test,
+                            scoring= True,
+                            test_data= y_test)
+            # Save the model to a file
+            joblib.dump(model, 'forecasting_model.pkl')
 
-            # Scatter plot
-            plt.figure(figsize=(10, 6))
-            # Plot actual values in red
-            plt.plot(range(len(y_test)), y_test, color='red', label='Actual Power')
-            # Plot predicted values in blue
-            plt.plot(range(len(y_power_pred)), y_power_pred, color='blue', label='Predicted Power')
-            # Adding labels and title
-            plt.xlabel('Time')
-            plt.ylabel('load')
-            plt.title('Actual vs Predicted load')
-            plt.legend()
-            plt.tight_layout()
-            plt.show()
             return model
         except Exception as e:
             logger.error(f"error in model trainer: {e}",exc_info=True)
+
+    def prediction(self,model, input_data, scoring=False, test_data= None,prediction= False):
+        try:
+            if prediction:
+                input_data = self.scaling_layer(input_data)
+
+            # Step 6: Make predictions
+            y_pred = model.predict(input_data)
+            if y_pred is not None:
+                logger.info("predition_succesful")
+
+            if scoring :
+                # Step 7: Evaluate the model
+                print("\nModel Power Evaluation")
+                print("Mean Squared Error (MSE):", mean_squared_error(test_data, y_pred))
+                print("Mean Absolute Error (MAE):", mean_absolute_error(test_data, y_pred))
+                print("R-squared:", r2_score(test_data, y_pred))
+            
+                # Scatter plot
+                plt.figure(figsize=(10, 6))
+                # Plot actual values in red
+                plt.plot(range(len(test_data)), test_data, color='red', label='Actual Power')
+                # Plot predicted values in blue
+                plt.plot(range(len(y_pred)), y_pred, color='blue', label='Predicted Power')
+                # Adding labels and title
+                plt.xlabel('Time')
+                plt.ylabel('load')
+                plt.title('Actual vs Predicted load')
+                plt.legend()
+                plt.tight_layout()
+                plt.show()
+            
+            return y_pred
+        except Exception as e:
+            logger.error(f"error in prediction: {e}",exc_info=True)
+
+    def scaling_layer(self,datset):
+        try:
+            scaler = MinMaxScaler()
+            features_to_normalize = datset.columns
+            datset[features_to_normalize] = scaler.fit_transform(datset[features_to_normalize])
+            return datset
+        
+        except Exception as e:
+            logger.error(f"error in scaling: {e}",exc_info= True)    
+
+
     def correlation_matrix(self,df):
         try:
             correlation_matrix_data = df.corr()
@@ -356,10 +466,12 @@ class NPCL():
             weather_df = pd.DataFrame(weather_data['hourly'])
             weather_df['time'] = pd.to_datetime(weather_df['time'])
             weather_df.rename(columns={"time":"creation_time"}, inplace=True)
+            weather_df.set_index("creation_time",inplace=True,drop=True)
             logger.info(f"weather data:{len(weather_df)} ")
 
             if duration != "hour":
-                resampled_df = weather_df.resample(rule=duration).bfill()
+                resampled_df = weather_df.resample(rule=duration).ffill()
+                resampled_df.reset_index(inplace=True)
                 return resampled_df
             logger.info(f"weather data done")
             return weather_df
