@@ -20,34 +20,42 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
-# from sklearn.externals import joblib
 import joblib
+import tensorflow as tf
+logger.info(f"tf version:{tf.__version__}")
+from tensorflow import keras
+from tensorflow.keras import layers                         # type: ignore
+from tensorflow.keras.models import Sequential              # type: ignore
+from tensorflow.keras.layers import LSTM, Dense, Dropout    # type: ignore
+from tensorflow.keras import regularizers                   # type: ignore
+from sklearn.inspection import permutation_importance
+np.set_printoptions(precision=3, suppress=True)
 
 
 class common():
     def __init__(self) -> None:
         pass
     
-    def holidays_list(self,start_date_str, end_date_str):
-        logger.info("Generating holidays list")
-        try:
-            start_date = start_date_str.date()
-            end_date = end_date_str.date()
-            holiday_list = []
-            # Get the holiday dates in India for the specified year
-            india_holidays = holidays.CountryHoliday('India', years=start_date.year)
-            # Iterate through each date from start_date to end_date
-            current_date = start_date
-            while current_date <= end_date:
-                # Check if the current date is a holiday in India or a Sunday
-                if current_date in india_holidays or current_date.weekday() == 6:
-                    holiday_list.append(current_date)
-                current_date += timedelta(days=1)
-            return holiday_list
+    # def holidays_list(self,start_date_str, end_date_str):
+    #     logger.info("Generating holidays list")
+    #     try:
+    #         start_date = start_date_str.date()
+    #         end_date = end_date_str.date()
+    #         holiday_list = []
+    #         # Get the holiday dates in India for the specified year
+    #         india_holidays = holidays.CountryHoliday('India', years=start_date.year)
+    #         # Iterate through each date from start_date to end_date
+    #         current_date = start_date
+    #         while current_date <= end_date:
+    #             # Check if the current date is a holiday in India or a Sunday
+    #             if current_date in india_holidays or current_date.weekday() == 6:
+    #                 holiday_list.append(current_date)
+    #             current_date += timedelta(days=1)
+    #         return holiday_list
 
-        except Exception as e:
-            logger.error(f"Error in holidays_list: {e}")
-            return None
+    #     except Exception as e:
+    #         logger.error(f"Error in holidays_list: {e}")
+    #         return None
 
     def add_lags(self, dff, target_col, large_data= False):
         try:
@@ -147,12 +155,7 @@ class common():
     def holidays_list(self,start_date, end_date):
         logger.info("Generating holidays list")
         try:
-            # start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
-            # end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
-            # start_date = start_date_str.date()
-            # end_date = end_date_str.date()
             holiday_list = []
-            # Get the holiday dates in India for the specified year
             india_holidays = holidays.CountryHoliday('India', years=start_date.year)
             # Iterate through each date from start_date to end_date
             current_date = start_date
@@ -225,39 +228,46 @@ class common():
             n = len(dataset)
             train_df = dataset[0:int(n*0.9)]
             test_df = dataset[int(n*0.9):]
-            train_features, test_features = train_df.copy(),test_df.copy() #,val_df.copy()
-            train_labels = train_features.pop(target_variable)
-            test_labels = test_features.pop(target_variable)
+            train_dataset, test_dataset = train_df.copy(),test_df.copy() #,val_df.copy()
+            # train_labels = train_features.pop(target_variable)
+            # test_labels = test_features.pop(target_variable)
             
             # print(f"train_features shape:{train_features.shape},train_label shape: {train_labels.shape}")
             # print(f"test_features shape:{test_features.shape} ,test_label shape: {test_labels.shape}")
             logger.info(f"data split done")
-            logger.info(f"train_features shape:{train_features.shape},train_label shape: {train_labels.shape}")
-            logger.info(f"test_features shape:{test_features.shape} ,test_label shape: {test_labels.shape}")
-            return train_features,test_features,train_labels, test_labels
+            # logger.info(f"train_features shape:{train_features.shape} ,train_label shape: {train_labels.shape}")
+            # logger.info(f"test_features shape:{test_features.shape} ,test_label shape: {test_labels.shape}")
+            logger.info(f"train_features shape:{train_dataset.shape}")
+            logger.info(f"test_features shape:{test_dataset.shape}")
+
+            return train_dataset,test_dataset
+            # return train_features,test_features,train_labels, test_labels
         
         except Exception as e:
             logger.error(f"error in split: {e}",exc_info=True)
 
 
-    def model_trainer(self, train_fetures, train_label,model_name=None):
+    def model_trainer(self, train_dataset, target_variable, model_name=None):
         try:
-            dataset = train_fetures.merge(train_label, on="creation_time").copy()
+            # dataset = train_fetures.merge(train_label, on="creation_time").copy()
+            # print(dataset.columns)
             # Split the dataset into training and test sets
-            X_train, X_test, y_train, y_test = self.data_split_function(dataset=dataset)
-
+            train_features, test_features = self.data_split_function(dataset=train_dataset)
+            train_labels = train_features.pop(target_variable)
+            test_labels = test_features.pop(target_variable)
+            
             if model_name =="RFR":
                 # Step 4: Initialize the RandomForestRegressor model
                 model = RandomForestRegressor(n_estimators=100, random_state=42)  # You can tweak hyperparameters
 
             # Step 5: Train the model
-            model.fit(X_train, y_train)
+            model.fit(train_features, train_labels)
             logger.info(f"model trained")
             
             self.prediction(model= model,
-                            input_data= X_test,
+                            input_data= test_features,
                             scoring= True,
-                            test_data= y_test)
+                            test_data= test_labels)
             # Save the model to a file
             joblib.dump(model, 'forecasting_model.pkl')
 
