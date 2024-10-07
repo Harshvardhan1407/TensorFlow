@@ -30,6 +30,7 @@ from tensorflow.keras.layers import LSTM, Dense, Dropout    # type: ignore
 from tensorflow.keras import regularizers                   # type: ignore
 from sklearn.inspection import permutation_importance
 np.set_printoptions(precision=3, suppress=True)
+import pickle
 
 
 class common():
@@ -64,10 +65,8 @@ class common():
 
             # 1 Hour, 2 Hours, 6 Hours
             dff['lag1_hour']   =  (dff.index - pd.Timedelta('1 hour')).map(target_map)
-            dff['lag2_hours']  =  (dff.index - pd.Timedelta('2 hours')).map(target_map)
             dff['lag3_hours']  =  (dff.index - pd.Timedelta('3 hours')).map(target_map)
-            dff['lag6_hours']  =  (dff.index - pd.Timedelta('6 hours')).map(target_map)
-            dff['lag12_hours'] =  (dff.index - pd.Timedelta('12 hours')).map(target_map)
+            # dff['lag12_hours'] =  (dff.index - pd.Timedelta('12 hours')).map(target_map)
             dff['lag1_day']    =  (dff.index - pd.Timedelta('1 day')).map(target_map)
             dff['lag1_week']   =  (dff.index - pd.Timedelta('7 days')).map(target_map)
 
@@ -77,6 +76,9 @@ class common():
                 dff['lag_45_day'] = (dff.index - pd.Timedelta('45 days')).map(target_map)
                 logger.info(f" lags added for large data")
                 return dff
+            else:
+                dff['lag2_hours']  =  (dff.index - pd.Timedelta('2 hours')).map(target_map)
+                dff['lag6_hours']  =  (dff.index - pd.Timedelta('6 hours')).map(target_map)
             
             dff['lag2_days'] = (dff.index - pd.Timedelta('2 days')).map(target_map)
             dff['lag3_days'] = (dff.index - pd.Timedelta('3 days')).map(target_map)
@@ -90,7 +92,7 @@ class common():
             logger.error(f"An unexpected error occurred: {ex}",exc_info= True)
 
 
-    def create_features(self,hourly_data):
+    def create_features(self,hourly_data,lagre_data= False):
         try:
             hourly_data = hourly_data.copy()
             # Check if the index is in datetime format
@@ -102,14 +104,16 @@ class common():
             hourly_data['dayofweek'] = hourly_data.index.dayofweek
             hourly_data['weekofyear'] = hourly_data.index.isocalendar().week
             hourly_data['hour'] = hourly_data.index.hour
-            # hourly_data['month'] = hourly_data.index.month
             hourly_data['dayofweek'] = hourly_data.index.dayofweek
-            # hourly_data['quarter'] = hourly_data.index.quarter
             hourly_data['dayofyear'] = hourly_data.index.dayofyear
             hourly_data['is_weekend'] = hourly_data['dayofweek'].isin([5, 6]).astype(int)
             hourly_data['holiday'] = 0
-            # hourly_data['weekofyear'] = hourly_data.index.isocalendar().week
-            # hourly_data['year'] = hourly_data.index.year
+            if lagre_data:
+                hourly_data['month'] = hourly_data.index.month
+                hourly_data['quarter'] = hourly_data.index.quarter
+                hourly_data['weekofyear'] = hourly_data.index.isocalendar().week
+                hourly_data['year'] = hourly_data.index.year
+            
             return hourly_data
 
         except Exception as e:
@@ -170,35 +174,43 @@ class common():
             logger.error(f"Error in holidays_list: {e}",exc_info=True)
             return None
         
-    def data_split(self, dataset, target_variable= "Load_kW"): 
-        """
-            Splits the given dataset into training and testing sets, separating features and the target variable.
+    # def data_split(self, dataset, target_variable= "Load_kW"): 
+    #     """
+    #         Splits the given dataset into training and testing sets, separating features and the target variable.
 
-            Args:
-                dataset (pandas.DataFrame): The dataset containing both features and the target variable.
-                target_variable (str): The name of the column representing the target variable to be predicted. Default is 'Load_kW'.
+    #         Args:
+    #             dataset (pandas.DataFrame): The dataset containing both features and the target variable.
+    #             target_variable (str): The name of the column representing the target variable to be predicted. Default is 'Load_kW'.
 
-            Returns:
-                X_train (pandas.DataFrame): Training set features.
-                X_test (pandas.DataFrame): Testing set features.
-                y_train (pandas.Series): Training set target variable.
-                y_test (pandas.Series): Testing set target variable.
+    #         Returns:
+    #             X_train (pandas.DataFrame): Training set features.
+    #             X_test (pandas.DataFrame): Testing set features.
+    #             y_train (pandas.Series): Training set target variable.
+    #             y_test (pandas.Series): Testing set target variable.
             
-            Raises:
-                Exception: If there's an issue during the data split, an error message is logged.
+    #         Raises:
+    #             Exception: If there's an issue during the data split, an error message is logged.
 
-            Example:
-                >>> df = pd.DataFrame({...})
-                >>> X_train, X_test, y_train, y_test = obj.data_split(df, target_variable="Load_kW")
-        """
+    #         Example:
+    #             >>> df = pd.DataFrame({...})
+    #             >>> X_train, X_test, y_train, y_test = obj.data_split(df, target_variable="Load_kW")
+    #     """
+    #     try:
+    #         dataset_features = dataset.copy()
+    #         dataset_label = dataset_features.pop(target_variable)
+    #         # Split the dataset into training and test sets
+    #         X_train, X_test, y_train, y_test = train_test_split(dataset_features, dataset_label, test_size=0.2, 
+    #                                                             # random_state=42
+    #                                                             )
+    #         return X_train, X_test, y_train, y_test
+
+    def features_label_extraction(self,dataset,target_variable):
         try:
             dataset_features = dataset.copy()
             dataset_label = dataset_features.pop(target_variable)
-            # Split the dataset into training and test sets
-            X_train, X_test, y_train, y_test = train_test_split(dataset_features, dataset_label, test_size=0.2, 
-                                                                # random_state=42
-                                                                )
-            return X_train, X_test, y_train, y_test
+            return dataset_features, dataset_label
+        except Exception as e:
+            logger.info("error in feature label extraction",exc_info= True)
         
         except Exception as e:
             logger.info(f"error in data split : {e}",exc_info=True)
@@ -252,7 +264,8 @@ class common():
             # dataset = train_fetures.merge(train_label, on="creation_time").copy()
             # print(dataset.columns)
             # Split the dataset into training and test sets
-            train_features, test_features = self.data_split_function(dataset=train_dataset)
+            dataset_scalled = self.scaling_layer(dataset=train_dataset)
+            train_features, test_features = self.data_split_function(dataset=dataset_scalled)
             train_labels = train_features.pop(target_variable)
             test_labels = test_features.pop(target_variable)
             
@@ -261,7 +274,7 @@ class common():
                 model = RandomForestRegressor(n_estimators=100, random_state=42)  # You can tweak hyperparameters
 
             # Step 5: Train the model
-            model.fit(train_features, train_labels)
+            model.fit(train_features,train_labels)
             logger.info(f"model trained")
             
             self.prediction(model= model,
@@ -275,10 +288,20 @@ class common():
         except Exception as e:
             logger.error(f"error in model trainer: {e}",exc_info=True)
 
+    def scaler_value(self):
+        try:
+            with open('minmax_scaler.pkl', 'rb') as f:
+                scaler = pickle.load(f)
+            return scaler
+        except Exception as e:
+            logger.error(f"error in scaler_value: {e}",exc_info=True)
+
     def prediction(self,model, input_data, scoring=False, test_data= None,prediction= False):
         try:
             if prediction:
-                input_data = self.scaling_layer(input_data)
+                scaler= self.scaler_value()
+
+                input_data = scaler.transform(input_data)
 
             # Step 6: Make predictions
             y_pred = model.predict(input_data)
@@ -310,12 +333,16 @@ class common():
         except Exception as e:
             logger.error(f"error in prediction: {e}",exc_info=True)
 
-    def scaling_layer(self,datset):
+    def scaling_layer(self,dataset,target_variable= "Load_kW"):
         try:
             scaler = MinMaxScaler()
-            features_to_normalize = datset.columns
-            datset[features_to_normalize] = scaler.fit_transform(datset[features_to_normalize])
-            return datset
+            # Exclude the "Load_kW" column from features to normalize
+            features_to_normalize = [col for col in dataset.columns if col != target_variable]
+        
+            dataset[features_to_normalize] = scaler.fit_transform(dataset[features_to_normalize])
+            with open('minmax_scaler.pkl', 'wb') as f:
+                pickle.dump(scaler, f)
+            return dataset
         
         except Exception as e:
             logger.error(f"error in scaling: {e}",exc_info= True)    
@@ -458,22 +485,28 @@ class NPCL():
             response.raise_for_status()
             weather_data = response.json()
         
-            for i in range(len(weather_data['hourly']['time'])):
-                            hour_data = {
-                # "_id": f"{site_data['_id']}_{weather_data['hourly']['time'][i]}",  # MongoDB's unique identifier
-                # "site_id": site_data["_id"],
-                "time": weather_data['hourly']['time'][i],
-                "temperature_2m": weather_data['hourly'].get('temperature_2m', [])[i],
-                "relative_humidity_2m": weather_data['hourly'].get('relative_humidity_2m', [])[i],
-                "apparent_temperature": weather_data['hourly'].get('apparent_temperature', [])[i],
-                "precipitation": weather_data['hourly'].get('precipitation', [])[i],
-                "wind_speed_10m": weather_data['hourly'].get('wind_speed_10m', [])[i],
-                "wind_speed_100m": weather_data['hourly'].get('wind_speed_100m', [])[i],
-                "creation_time_iso": datetime.utcfromtimestamp(
-                    datetime.strptime(weather_data['hourly']['time'][i],
-                                        '%Y-%m-%dT%H:%M').timestamp()).isoformat()
-            }
-            weather_df = pd.DataFrame(weather_data['hourly'])
+            # for i in range(len(weather_data['hourly']['time'])):
+            #                 hour_data = {
+            #     # "_id": f"{site_data['_id']}_{weather_data['hourly']['time'][i]}",  # MongoDB's unique identifier
+            #     # "site_id": site_data["_id"],
+            #     "time": weather_data['hourly']['time'][i],
+            #     "temperature_2m": weather_data['hourly'].get('temperature_2m', [])[i],
+            #     "relative_humidity_2m": weather_data['hourly'].get('relative_humidity_2m', [])[i],
+            #     "apparent_temperature": weather_data['hourly'].get('apparent_temperature', [])[i],
+            #     "precipitation": weather_data['hourly'].get('precipitation', [])[i],
+            #     "wind_speed_10m": weather_data['hourly'].get('wind_speed_10m', [])[i],
+            #     "wind_speed_100m": weather_data['hourly'].get('wind_speed_100m', [])[i],
+            #     "creation_time_iso": datetime.utcfromtimestamp(
+            #         datetime.strptime(weather_data['hourly']['time'][i],
+            #                             '%Y-%m-%dT%H:%M').timestamp()).isoformat()
+            # }
+            # weather_df = pd.DataFrame(weather_data['hourly'])
+            weather_df = pd.DataFrame({
+                                    'time': weather_data['hourly']['time'],
+                                    'apparent_temperature': weather_data['hourly']['apparent_temperature'],
+                                    'rain': weather_data['hourly']['rain'],
+                                    'wind_speed_10m': weather_data['hourly']['wind_speed_10m']
+                                })
             weather_df['time'] = pd.to_datetime(weather_df['time'])
             weather_df.rename(columns={"time":"creation_time"}, inplace=True)
             weather_df.set_index("creation_time",inplace=True,drop=True)
@@ -490,6 +523,130 @@ class NPCL():
                 logger.info(f"error in weather data: {e}",exc_info=True)
 
 ######################################################################################################################################
+
+
+class tensorflowclass:
+    def __init__(self) -> None:
+        pass
+        
+    def tensor_conversion(self,dataframe):
+        try:
+            dataframe_tensor = tf.convert_to_tensor(dataframe, dtype=tf.float32)
+            return dataframe_tensor
+        except Exception as e:
+            logger.error(f"error in tensor_conversion: {e}",exc_info=True)
+
+    # train test split
+    def train_test_split(self,df):
+        try:
+            # column_indices = {name: i for i, name in enumerate(df.columns)}
+            n = len(df)
+            train_df = df[0:int(n*0.9)]
+            # val_df = df[int(n*0.7):int(n*0.9)]
+            test_df = df[int(n*0.9):]
+            train_features, test_features = train_df.copy(),test_df.copy() #,val_df.copy()
+            train_labels = train_features.pop('consumed_unit')
+            # val_labels = val_features.pop('consumed_unit')
+            test_labels = test_features.pop('consumed_unit')
+            train_features = self.tensor_conversion(train_features)
+            test_features = self.tensor_conversion(test_features)
+            train_labels = self.tensor_conversion(train_labels)
+            test_labels = self.tensor_conversion(test_labels)
+            print(f"train_features shape:{train_features.shape},train_label shape: {train_labels.shape}")
+            # print(f"val_features shape:{val_features.shape},val_label shape: {val_labels.shape},val_labels type: {type(val_labels)}")
+            print(f"test_features shape:{test_features.shape} ,test_label shape: {test_labels.shape}")
+            logger.info(f"data split done")
+            logger.info(f"train_features shape:{train_features.shape},train_label shape: {train_labels.shape}")
+            # logger.info(f"val_features shape:{val_features.shape},val_label shape: {val_labels.shape},val_labels type: {type(val_labels)}")
+            logger.info(f"test_features shape:{test_features.shape} ,test_label shape: {test_labels.shape}")
+            return train_features,test_features,train_labels, test_labels
+        except Exception as e:
+            logger.error(f"error in split: {e}",exc_info=True)
+
+    def normalizer_function(self,df):
+        try:
+            # df_mean, df_std = df.mean(), df.std()
+            # df = (df - df_mean) / df_std
+            normalizer = tf.keras.layers.Normalization(axis=-1)
+            normalizer.adapt(np.array(df))
+            return normalizer
+        
+        except Exception as e:
+            logger.error(f"error in normalizer: {e}",exc_info=True)
+
+    def compile_and_fit(self,
+                        model,
+                        train_features = None,
+                        train_labels = None, 
+                        patience=5,
+                        batch_size = None,
+                        MAX_EPOCHS = 20,
+                        learning_rate = 0.0001,                    
+                        ):
+        try:
+            early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
+                                                                patience=patience,
+                                                                mode='min')
+
+            model.compile(loss=tf.keras.losses.MeanSquaredError(),
+                            optimizer=tf.keras.optimizers.Adam(learning_rate),
+                            metrics=[tf.keras.metrics.MeanAbsoluteError()])
+
+            history = model.fit(train_features,train_labels, epochs=MAX_EPOCHS,
+                                validation_split=0.2,
+                                callbacks=[early_stopping],
+                                verbose=1,
+                                )
+            return model, history
+        except Exception as e:
+            logger.info(f"error in compiling and fitting: {e}",exc_info=True)
+
+    def training_score(self,history):
+        print(f"training_score:loss:{history.history['loss'][-1]:.3f},mae:{history.history['mean_absolute_error'][-1]:.3f}")
+
+    def evaluate(self,model,features,labels,verbose=0):
+        score = model.evaluate(features,labels,verbose=verbose)
+        print("test_score:",score)
+        return score
+
+    def prediction(self,model, input_data,input_label=None,verbose=1):
+        y_pred = model.predict(input_data,verbose)
+        # Calculate MAE, MSE, and R²
+        mae = mean_absolute_error(input_label, y_pred)
+        mse = mean_squared_error(input_label, y_pred)
+        r2 = r2_score(input_label, y_pred)
+        print(f"mae: {mae:.3f}")
+        print(f"mse: {mse:.3f}")
+        print(f"R2: {r2:.3f}")
+        return y_pred
+
+    def predict_func(self,model, input_data, input_label=None, verbose=1):
+        # Predict using the model
+        y_pred = model.predict(input_data, verbose=verbose)
+        
+        # Convert the predictions and input labels to TensorFlow tensors
+        y_pred = tf.convert_to_tensor(y_pred, dtype=tf.float32)
+        input_label = tf.convert_to_tensor(input_label, dtype=tf.float32)
+        
+        # Calculate MAE using TensorFlow
+        mae_fn = tf.keras.losses.MeanAbsoluteError()
+        mae = mae_fn(input_label, y_pred).numpy()
+        
+        # Calculate MSE using TensorFlow
+        mse_fn = tf.keras.losses.MeanSquaredError()
+        mse = mse_fn(input_label, y_pred).numpy()
+        
+        # Calculate R² score manually
+        total_error = tf.reduce_sum(tf.square(input_label - tf.reduce_mean(input_label)))
+        unexplained_error = tf.reduce_sum(tf.square(input_label - y_pred))
+        r2 = 1 - tf.divide(unexplained_error, total_error).numpy()
+        return mae, mse, r2
+
+    # Example usage
+    # mae, mse, r2 = prediction(model, input_data, input_label)
+    # print(f"MAE: {mae}, MSE: {mse}, R²: {r2}")
+
+#####################################################################################################################################
 
 
 def data_validation_filtering(dfs):
@@ -576,119 +733,3 @@ def data_ingstion():
     except Exception as e:
         logger.error(f"error in data ingestion:{e}",exc_info=True)
 
-
-def tensor_conversion(dataframe):
-    try:
-        dataframe_tensor = tf.convert_to_tensor(dataframe, dtype=tf.float32)
-        return dataframe_tensor
-    except Exception as e:
-        logger.error(f"error in tensor_conversion: {e}",exc_info=True)
-
-# train test split
-# def train_test_split(df):
-#     try:
-#         # column_indices = {name: i for i, name in enumerate(df.columns)}
-#         n = len(df)
-#         train_df = df[0:int(n*0.9)]
-#         # val_df = df[int(n*0.7):int(n*0.9)]
-#         test_df = df[int(n*0.9):]
-#         train_features, test_features = train_df.copy(),test_df.copy() #,val_df.copy()
-#         train_labels = train_features.pop('consumed_unit')
-#         # val_labels = val_features.pop('consumed_unit')
-#         test_labels = test_features.pop('consumed_unit')
-#         train_features = tensor_conversion(train_features)
-#         test_features = tensor_conversion(test_features)
-#         train_labels = tensor_conversion(train_labels)
-#         test_labels = tensor_conversion(test_labels)
-#         print(f"train_features shape:{train_features.shape},train_label shape: {train_labels.shape}")
-#         # print(f"val_features shape:{val_features.shape},val_label shape: {val_labels.shape},val_labels type: {type(val_labels)}")
-#         print(f"test_features shape:{test_features.shape} ,test_label shape: {test_labels.shape}")
-#         logger.info(f"data split done")
-#         logger.info(f"train_features shape:{train_features.shape},train_label shape: {train_labels.shape}")
-#         # logger.info(f"val_features shape:{val_features.shape},val_label shape: {val_labels.shape},val_labels type: {type(val_labels)}")
-#         logger.info(f"test_features shape:{test_features.shape} ,test_label shape: {test_labels.shape}")
-#         return train_features,test_features,train_labels, test_labels
-#     except Exception as e:
-#         logger.error(f"error in split: {e}",exc_info=True)
-
-def normalizer_function(df):
-    try:
-        # df_mean, df_std = df.mean(), df.std()
-        # df = (df - df_mean) / df_std
-        normalizer = tf.keras.layers.Normalization(axis=-1)
-        normalizer.adapt(np.array(df))
-        return normalizer
-    
-    except Exception as e:
-        logger.error(f"error in normalizer: {e}",exc_info=True)
-
-def compile_and_fit(model,
-                    train_features = None,
-                    train_labels = None, 
-                    patience=5,
-                    batch_size = None,
-                    MAX_EPOCHS = 20,
-                    learning_rate = 0.0001,                    
-                    ):
-    try:
-        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
-                                                            patience=patience,
-                                                            mode='min')
-
-        model.compile(loss=tf.keras.losses.MeanSquaredError(),
-                        optimizer=tf.keras.optimizers.Adam(learning_rate),
-                        metrics=[tf.keras.metrics.MeanAbsoluteError()])
-
-        history = model.fit(train_features,train_labels, epochs=MAX_EPOCHS,
-                            validation_split=0.2,
-                            callbacks=[early_stopping],
-                            verbose=1,
-                            )
-        return model, history
-    except Exception as e:
-        logger.info(f"error in compiling and fitting: {e}",exc_info=True)
-
-def training_score(history):
-    print(f"training_score:loss:{history.history['loss'][-1]:.3f},mae:{history.history['mean_absolute_error'][-1]:.3f}")
-
-def evaluate(model,features,labels,verbose=0):
-    score = model.evaluate(features,labels,verbose=verbose)
-    print("test_score:",score)
-    return score
-
-def prediction(model, input_data,input_label=None,verbose=1):
-    y_pred = model.predict(input_data,verbose)
-    # Calculate MAE, MSE, and R²
-    mae = mean_absolute_error(input_label, y_pred)
-    mse = mean_squared_error(input_label, y_pred)
-    r2 = r2_score(input_label, y_pred)
-    print(f"mae: {mae:.3f}")
-    print(f"mse: {mse:.3f}")
-    print(f"R2: {r2:.3f}")
-    return y_pred
-
-def predict_func(model, input_data, input_label=None, verbose=1):
-    # Predict using the model
-    y_pred = model.predict(input_data, verbose=verbose)
-    
-    # Convert the predictions and input labels to TensorFlow tensors
-    y_pred = tf.convert_to_tensor(y_pred, dtype=tf.float32)
-    input_label = tf.convert_to_tensor(input_label, dtype=tf.float32)
-    
-    # Calculate MAE using TensorFlow
-    mae_fn = tf.keras.losses.MeanAbsoluteError()
-    mae = mae_fn(input_label, y_pred).numpy()
-    
-    # Calculate MSE using TensorFlow
-    mse_fn = tf.keras.losses.MeanSquaredError()
-    mse = mse_fn(input_label, y_pred).numpy()
-    
-    # Calculate R² score manually
-    total_error = tf.reduce_sum(tf.square(input_label - tf.reduce_mean(input_label)))
-    unexplained_error = tf.reduce_sum(tf.square(input_label - y_pred))
-    r2 = 1 - tf.divide(unexplained_error, total_error).numpy()
-    return mae, mse, r2
-
-# Example usage
-# mae, mse, r2 = prediction(model, input_data, input_label)
-# print(f"MAE: {mae}, MSE: {mse}, R²: {r2}")
