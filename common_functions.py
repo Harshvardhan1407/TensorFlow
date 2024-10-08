@@ -31,6 +31,9 @@ from tensorflow.keras import regularizers                   # type: ignore
 from sklearn.inspection import permutation_importance
 np.set_printoptions(precision=3, suppress=True)
 import pickle
+from xgboost import XGBRegressor
+from sklearn.model_selection import RandomizedSearchCV, TimeSeriesSplit
+from math import sqrt
 
 
 class common():
@@ -174,35 +177,21 @@ class common():
             logger.error(f"Error in holidays_list: {e}",exc_info=True)
             return None
         
-    # def data_split(self, dataset, target_variable= "Load_kW"): 
-    #     """
-    #         Splits the given dataset into training and testing sets, separating features and the target variable.
+    def data_split(self, dataset, target_variable= "Load_kW"): 
+        try:
+            dataset_features = dataset.copy()
+            dataset_label = dataset_features.pop(target_variable)
+            # Split the dataset into training and test sets
+            train_features, test_features, train_labels, test_labels= train_test_split(dataset_features, dataset_label, test_size=0.2, 
+                                                                random_state=42
+                                                                )
+            logger.info(f"data split done")
+            logger.info(f"train_features shape:{train_features.shape} ,train_label shape: {train_labels.shape}")
+            logger.info(f"test_features shape:{test_features.shape} ,test_label shape: {test_labels.shape}")
+            return train_features, test_features, train_labels, test_labels
 
-    #         Args:
-    #             dataset (pandas.DataFrame): The dataset containing both features and the target variable.
-    #             target_variable (str): The name of the column representing the target variable to be predicted. Default is 'Load_kW'.
-
-    #         Returns:
-    #             X_train (pandas.DataFrame): Training set features.
-    #             X_test (pandas.DataFrame): Testing set features.
-    #             y_train (pandas.Series): Training set target variable.
-    #             y_test (pandas.Series): Testing set target variable.
-            
-    #         Raises:
-    #             Exception: If there's an issue during the data split, an error message is logged.
-
-    #         Example:
-    #             >>> df = pd.DataFrame({...})
-    #             >>> X_train, X_test, y_train, y_test = obj.data_split(df, target_variable="Load_kW")
-    #     """
-    #     try:
-    #         dataset_features = dataset.copy()
-    #         dataset_label = dataset_features.pop(target_variable)
-    #         # Split the dataset into training and test sets
-    #         X_train, X_test, y_train, y_test = train_test_split(dataset_features, dataset_label, test_size=0.2, 
-    #                                                             # random_state=42
-    #                                                             )
-    #         return X_train, X_test, y_train, y_test
+        except Exception as e:
+            logger.error(f"error in data split: {e}",exc_info=True)
 
     def features_label_extraction(self,dataset,target_variable):
         try:
@@ -259,38 +248,53 @@ class common():
             logger.error(f"error in split: {e}",exc_info=True)
 
 
-    def model_trainer(self, train_dataset, target_variable, model_name=None):
+    def model_trainer(self, train_dataset, target_variable, random_state=True, model_name=None):
         try:
-            # dataset = train_fetures.merge(train_label, on="creation_time").copy()
-            # print(dataset.columns)
-            # Split the dataset into training and test sets
+            # noramlizing data
             dataset_scalled = self.scaling_layer(dataset=train_dataset)
-            train_features, test_features = self.data_split_function(dataset=dataset_scalled)
-            train_labels = train_features.pop(target_variable)
-            test_labels = test_features.pop(target_variable)
-            
-            if model_name =="RFR":
-                # Step 4: Initialize the RandomForestRegressor model
-                model = RandomForestRegressor(n_estimators=100, random_state=42)  # You can tweak hyperparameters
 
-            # Step 5: Train the model
-            model.fit(train_features,train_labels)
-            logger.info(f"model trained")
+            # Split the dataset into training and test sets using train test split function with randomizing data
+            if random_state:            
+                # dataset_labels = dataset_scalled.pop(target_variable)
+                train_features, test_features, train_label, test_label = self.data_split(dataset_scalled)    
             
-            self.prediction(model= model,
+            else:    
+                # Split the dataset into training and test sets using custom data split function without randomizing data
+                train_features, test_features = self.data_split_function(dataset=dataset_scalled)
+                train_label = train_features.pop(target_variable)
+                test_label = test_features.pop(target_variable)
+            
+            os.makedirs('saved_model', exist_ok=True)
+            if model_name == "RFR":
+                # Step 4: Initialize the RandomForestRegressor model
+                model= self.random_forest_regressor(train_features=train_features,
+                                                    train_label=train_label)
+                logger.info(f"model trained : RandomForestRegressor")
+                self.prediction(model= model,
                             input_data= test_features,
                             scoring= True,
-                            test_data= test_labels)
-            # Save the model to a file
-            joblib.dump(model, 'forecasting_model.pkl')
+                            test_data= test_label)
+                # Save the model to a file
+                joblib.dump(model, 'saved_model/RandomForestRegressor_model.pkl')
 
+            if model_name == "XGboost":
+                model = self.XGboost_model(train_features= train_features,
+                                           train_label= train_label)
+                logger.info(f"model trained : XGboost")
+                self.prediction(model= model,
+                            input_data= test_features,
+                            scoring= True,
+                            test_data= test_label)
+                # Save the model to a file
+                joblib.dump(model, 'saved_model/XGboost_model.pkl')            
+                
             return model
         except Exception as e:
             logger.error(f"error in model trainer: {e}",exc_info=True)
 
     def scaler_value(self):
         try:
-            with open('minmax_scaler.pkl', 'rb') as f:
+            with open('saved_model/minmax_scaler.pkl', 'rb') as f:
                 scaler = pickle.load(f)
             return scaler
         except Exception as e:
@@ -310,10 +314,17 @@ class common():
 
             if scoring :
                 # Step 7: Evaluate the model
+                rmse = sqrt(mean_squared_error(test_data, y_pred))
                 print("\nModel Power Evaluation")
                 print("Mean Squared Error (MSE):", mean_squared_error(test_data, y_pred))
                 print("Mean Absolute Error (MAE):", mean_absolute_error(test_data, y_pred))
+                print(f"Root Mean Squared Error (RMSE): {rmse}")
                 print("R-squared:", r2_score(test_data, y_pred))
+                logger.info(f"\nModel Evaluation")
+                logger.info(f"Root Mean Squared Error (RMSE): {rmse}")
+                logger.info(f"Mean Squared Error (MSE): {mean_squared_error(test_data, y_pred)}")
+                logger.info(f"Mean Absolute Error (MAE): {mean_absolute_error(test_data, y_pred)}")
+                logger.info(f"R-squared: {r2_score(test_data, y_pred)}")
             
                 # Scatter plot
                 plt.figure(figsize=(10, 6))
@@ -340,7 +351,7 @@ class common():
             features_to_normalize = [col for col in dataset.columns if col != target_variable]
         
             dataset[features_to_normalize] = scaler.fit_transform(dataset[features_to_normalize])
-            with open('minmax_scaler.pkl', 'wb') as f:
+            with open('saved_model/minmax_scaler.pkl', 'wb') as f:
                 pickle.dump(scaler, f)
             return dataset
         
@@ -360,6 +371,97 @@ class common():
         
         except Exception as e:
             logger.error(f"error in correlation_plot: {e}",exc_info=True)
+    
+    def random_forest_regressor(self, train_features, train_label):
+        try:
+            # model = RandomForestRegressor(n_estimators=100, random_state=42)  # You can tweak hyperparameters
+            # model.fit(train_features,train_label)
+            param_grid = {
+                'n_estimators': [100, 200, 300, 500, 1000],
+                'max_depth': [10, 20, 30, 50, None],
+                'min_samples_split': [2, 5, 10],
+                'min_samples_leaf': [1, 2, 5, 10],
+                'max_features': ['auto', 'sqrt', 'log2'],
+                'bootstrap': [True, False],
+                'n_jobs': [-1]  # Use all cores for faster training
+            }
+
+            # Initialize the RandomForestRegressor model
+            model = RandomForestRegressor(random_state=42)
+
+            # Perform hyperparameter tuning using RandomizedSearchCV
+            random_search = RandomizedSearchCV(estimator=model, param_distributions=param_grid, 
+                                            n_iter=10, cv=5, verbose=2, 
+                                            scoring='neg_mean_squared_error', random_state=42, n_jobs=-1)
+            
+            # Fit the RandomizedSearchCV to the data
+            random_search.fit(train_features, train_label)
+            
+            # Get the best parameters
+            best_params = random_search.best_params_
+            print(f"Best Parameters: {best_params}")
+            
+            # Train the model with the best parameters
+            best_model = RandomForestRegressor(**best_params, random_state=42)
+            best_model.fit(train_features, train_label)
+            
+            logger.info(f"Model trained: RandomForestRegressor with best parameters")
+        
+            return best_model
+        
+        except Exception as e:
+            logger.error(f"error in random_forest_regressor: {e}", exc_info= True)
+    def XGboost_model(self,train_features, train_label):
+        try:
+            xgb_model = XGBRegressor()
+            xgb_model.fit(train_features, train_label)
+            
+            # Calculate and print model evaluation metrics for this sensor
+            train_score = xgb_model.score(train_features, train_label)
+            print(f"Initial Train Score {train_score}")
+            
+            # Perform hyperparameter tuning using RandomizedSearchCV
+            param_grid = { "n_estimators" : [200, 250, 300, 350,400, 450, 500, 550, 600, 650],       
+                    "max_depth": [1, 2, 3, 5, 10, 15, 20, 25, 30, 35, 40],
+                    "learning_rate": [0.0001, 0.001,0.01, 0.1, 0.3, 0.02, 0.2, 1, 0.03],
+                    "subsample": [0.1, 0.5, 0.7, 0.3, 0.2,0.4, 0.6],
+                    "colsample_bytree":  [0.1, 0.5, 0.7, 0.3, 0.2,0.4,0.6],
+                    'reg_alpha': [0.01, 0.1, 0.3, 0.02, 0.2, 1, 0.03],}
+            
+            random_search = RandomizedSearchCV(xgb_model,
+                                                param_distributions=param_grid,
+                                                n_iter=5,
+                                                scoring='neg_mean_squared_error',
+                                                cv=5,
+                                                random_state=100)
+
+            # Fit the RandomizedSearchCV to the data
+            # random_search.fit(X_train, y_train)
+            random_search.fit(train_features, train_label)
+
+            # Get the best parameters
+            best_params = random_search.best_params_
+            print(f"Best Parameters: {best_params}")
+
+            # Train the model with the best parameters
+            best_xgb_model = XGBRegressor(n_estimators=best_params['n_estimators'],
+                                            max_depth=best_params['max_depth'],
+                                            learning_rate=best_params['learning_rate'],
+                                            subsample=best_params['subsample'],
+                                            colsample_bytree=best_params['colsample_bytree'],
+                                            reg_alpha=best_params['reg_alpha'],
+                                            base_score=0.5,
+                                            booster='gbtree',
+                                            # reg_lambda=best_params['reg_lambda'],
+                                            objective='reg:squarederror')
+            best_xgb_model.fit(train_features, train_label)
+
+            # Evaluate the model on the test set
+            test_score = best_xgb_model.score(train_features, train_label)
+            print(f"TRAIN SCORE with hyperparameters tunning: {test_score}")
+            return best_xgb_model
+        except Exception as e:
+            logger.info(f"error in XGboost: {e}",exc_info= True)
 
 class NPCL():
     def __init__(self) -> None:
