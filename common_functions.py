@@ -274,8 +274,13 @@ class common():
                             input_data= test_features,
                             scoring= True,
                             test_data= test_label)
+                
                 # Save the model to a file
                 joblib.dump(model, 'saved_model/RandomForestRegressor_model.pkl')
+
+                model_version=max([int(i) for i in range(len(os.listdir("saved_models/test")+ [0])) ])+1
+                model.save(f"saved_models/test/{model_name}_1.{model_version}")
+
 
             if model_name == "XGboost":
                 model = self.XGboost_model(train_features= train_features,
